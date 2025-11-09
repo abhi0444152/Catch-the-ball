@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Catch the Ball — Simple Game</title>
+  <style>
+    :root{--bg:#0b1220;--card:#0f1724;--accent:#06b6d4;--text:#e6eef6}
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#071025,#07172a);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;color:var(--text)}
+    .wrap{width:360px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));padding:16px;border-radius:12px;box-shadow:0 10px 30px rgba(2,6,23,0.6);}
+    h1{font-size:18px;margin:0 0 8px;text-align:center}
+    #game{background:#071323;border-radius:8px;overflow:hidden;position:relative;width:320px;height:480px;margin:0 auto;box-shadow:inset 0 6px 18px rgba(0,0,0,0.6)}
+    .paddle{position:absolute;bottom:12px;height:14px;width:80px;background:linear-gradient(90deg,var(--accent),#0891b2);border-radius:8px;left:120px}
+    .ball{position:absolute;width:18px;height:18px;border-radius:50%;background:linear-gradient(180deg,#ffd166,#ff6b6b);left:150px;top:60px}
+    .hud{display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:14px;color:#b8c7d3}
+    .controls{display:flex;gap:8px;justify-content:center;margin-top:10px}
+    button{background:var(--accent);border:none;padding:8px 12px;border-radius:8px;color:#012027;cursor:pointer}
+    .small{font-size:12px;color:#9fb0c1}
+    /* simple modal */
+    .modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.5);visibility:hidden;opacity:0;transition:opacity .2s}
+    .modal.show{visibility:visible;opacity:1}
+    .modal .box{background:#071323;padding:16px;border-radius:10px;min-width:260px;text-align:center}
+    @media (max-width:420px){.wrap{width:95%}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Catch the Ball</h1>
+    <div id="game" tabindex="0" aria-label="Game area">
+      <div class="ball" id="ball"></div>
+      <div class="paddle" id="paddle"></div>
+    </div>
+    <div class="hud">
+      <div>Score: <strong id="score">0</strong></div>
+      <div>Lives: <strong id="lives">3</strong></div>
+    </div>
+    <div class="controls">
+      <button id="start">Start</button>
+      <button id="reset">Reset</button>
+    </div>
+    <p class="small">Use ← → arrows or drag the paddle (touch supported). Catch the falling ball. Difficulty increases with score.</p>
+  </div>
+
+  <div id="modal" class="modal" role="dialog" aria-modal="true">
+    <div class="box">
+      <div id="modalText">Game over</div>
+      <div style="margin-top:10px"><button id="modalBtn">OK</button></div>
+    </div>
+  </div>
+
+  <script>
+    try{
+      const game = document.getElementById('game');
+      const paddle = document.getElementById('paddle');
+      const ball = document.getElementById('ball');
+      const scoreEl = document.getElementById('score');
+      const livesEl = document.getElementById('lives');
+      const startBtn = document.getElementById('start');
+      const resetBtn = document.getElementById('reset');
+      const modal = document.getElementById('modal');
+      const modalText = document.getElementById('modalText');
+      const modalBtn = document.getElementById('modalBtn');
+
+      const G = {width:320, height:480};
+      let score = 0, lives = 3;
+      let ballX = 150, ballY = 60, ballSpeedY = 2.2, ballSpeedX = 1.2;
+      let paddleX = 120; // left px
+      let animId = null;
+      let running = false;
+
+      function render() {
+        paddle.style.left = paddleX + 'px';
+        ball.style.left = ballX + 'px';
+        ball.style.top = ballY + 'px';
+      }
+
+      function resetBall(){
+        ballX = Math.max(10, Math.random()*(G.width-30));
+        ballY = 30;
+        const speedUp = 0.03 * score;
+        ballSpeedY = 2.2 + speedUp;
+        ballSpeedX = (Math.random()>0.5?1: -1) * (1.0 + Math.min(2, score*0.05));
+      }
+
+      function showModal(text){
+        modalText.textContent = text;
+        modal.classList.add('show');
+      }
+      function hideModal(){ modal.classList.remove('show'); }
+
+      function gameOver(){
+        running = false;
+        cancelAnimationFrame(animId);
+        showModal('Game over! Your score: ' + score);
+      }
+
+      function update() {
+        if(!running) return;
+        ballX += ballSpeedX;
+        ballY += ballSpeedY;
+
+        if(ballX <= 4){ ballX = 4; ballSpeedX *= -1; }
+        if(ballX >= G.width - 22){ ballX = G.width - 22; ballSpeedX *= -1; }
+
+        const paddleTop = G.height - 12 - 14;
+        const paddleW = parseInt(getComputedStyle(paddle).width,10);
+        if(ballY + 18 >= paddleTop){
+          if(ballX + 9 >= paddleX && ballX <= paddleX + paddleW){
+            score += 1;
+            scoreEl.textContent = score;
+            ballSpeedY = -(1.8 + Math.min(4, score*0.08));
+            const hitPos = (ballX - paddleX) - (paddleW/2);
+            ballSpeedX += hitPos * 0.02;
+          }
+        }
+
+        if(ballY > G.height){
+          lives -= 1;
+          livesEl.textContent = lives;
+          if(lives <= 0){ gameOver(); return; }
+          resetBall();
+        }
+
+        render();
+        animId = requestAnimationFrame(update);
+      }
+
+      // input handlers
+      document.addEventListener('keydown', (e)=>{
+        if(!running) return;
+        if(e.key === 'ArrowLeft') paddleX = Math.max(4, paddleX - 18);
+        if(e.key === 'ArrowRight') paddleX = Math.min(G.width - parseInt(getComputedStyle(paddle).width) - 4, paddleX + 18);
+        render();
+      });
+
+      let dragging = false;
+      paddle.addEventListener('pointerdown', (e)=>{ dragging=true; paddle.setPointerCapture(e.pointerId); });
+      game.addEventListener('pointermove', (e)=>{
+        if(!dragging) return;
+        const rect = game.getBoundingClientRect();
+        let x = e.clientX - rect.left - parseInt(getComputedStyle(paddle).width)/2;
+        x = Math.max(4, Math.min(G.width - parseInt(getComputedStyle(paddle).width) - 4, x));
+        paddleX = x;
+        render();
+      });
+      window.addEventListener('pointerup', ()=> dragging = false);
+
+      startBtn.addEventListener('click', ()=>{
+        if(running) return;
+        running = true;
+        score = 0; lives = 3; scoreEl.textContent = score; livesEl.textContent = lives;
+        resetBall();
+        animId = requestAnimationFrame(update);
+        game.focus();
+        console.log('Game started');
+      });
+
+      resetBtn.addEventListener('click', ()=>{
+        running = false; cancelAnimationFrame(animId); score = 0; lives = 3; scoreEl.textContent = score; livesEl.textContent = lives; paddleX = 120; resetBall(); render(); hideModal();
+      });
+
+      modalBtn.addEventListener('click', ()=>{ hideModal(); });
+
+      // helpful tip: show console warning if JS disabled (this won't run if JS is disabled)
+      console.log('Game script loaded. If Start button does not work, open developer console to see errors.');
+
+      // initial render
+      resetBall(); render();
+
+    } catch(err){
+      console.error('Error initializing game:', err);
+      alert('There was an error starting the game. Open developer console to see details.');
+    }
+  </script>
+</body>
+</html>
