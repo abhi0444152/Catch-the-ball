@@ -63,21 +63,19 @@
 
       const G = {width:320, height:480};
       let score = 0, lives = 3;
-      // base speeds increased a bit
-      let ballX = 150, ballY = 60, baseSpeedY = 2.8, baseSpeedX = 1.6;
-      let ballSpeedY = baseSpeedY, ballSpeedX = baseSpeedX;
-      let paddleX = 120; // left px
+      let baseSpeedY = 3.0, baseSpeedX = 1.6;
+      let ballX = 150, ballY = 60, ballSpeedY = baseSpeedY, ballSpeedX = baseSpeedX;
+      let paddleX = 120;
       let animId = null;
       let running = false;
 
       function render() {
-        // keep paddle in bounds
         const pw = parseInt(getComputedStyle(paddle).width,10);
         paddleX = Math.max(4, Math.min(G.width - pw - 4, paddleX));
         paddle.style.left = paddleX + 'px';
-        // keep ball in bounds
         ballX = Math.max(4, Math.min(G.width - 22, ballX));
-        ballY = Math.max(-10, Math.min(G.height + 30, ballY));
+        // allow ballY slightly above 0 so top bounce can trigger but clamp to safe range
+        ballY = Math.max(-8, Math.min(G.height + 40, ballY));
         ball.style.left = ballX + 'px';
         ball.style.top = ballY + 'px';
       }
@@ -85,10 +83,9 @@
       function resetBall(){
         ballX = Math.max(10, Math.random()*(G.width-30));
         ballY = 30;
-        // speed grows with score (non-linear) but capped
         const speedFactor = 1 + Math.min(3, score * 0.12);
-        ballSpeedY = baseSpeedY * speedFactor * (Math.random()>0.5?1:1);
-        ballSpeedX = (Math.random()>0.5?1:-1) * baseSpeedX * (0.8 + Math.min(2.0, score * 0.06));
+        ballSpeedY = baseSpeedY * speedFactor * 1; // downward when reset
+        ballSpeedX = (Math.random()>0.5?1:-1) * baseSpeedX * (0.9 + Math.min(2.0, score * 0.06));
       }
 
       function showModal(text){
@@ -106,39 +103,48 @@
       function update() {
         if(!running) return;
 
-        // move ball
+        // apply movement
         ballX += ballSpeedX;
         ballY += ballSpeedY;
 
-        // bounce off left/right walls
+        // left/right walls bounce
         if(ballX <= 4){ ballX = 4; ballSpeedX = Math.abs(ballSpeedX); }
         if(ballX >= G.width - 22){ ballX = G.width - 22; ballSpeedX = -Math.abs(ballSpeedX); }
 
-        // bounce off top (so ball never disappears above)
-        if(ballY <= 0){ ballY = 0; ballSpeedY = Math.abs(ballSpeedY); }
+        // TOP bounce: make it robust — if ball reaches or crosses top, force it downward
+        if(ballY <= 2){
+          // put it at safe top position and make sure vertical speed is a decent positive number
+          ballY = 2;
+          // If current speed is already positive, ensure it's not tiny; else make it positive.
+          if(Math.abs(ballSpeedY) < 0.8) {
+            ballSpeedY = Math.max(1.6, Math.abs(ballSpeedY) + 1.2);
+          } else {
+            ballSpeedY = Math.abs(ballSpeedY) * 0.95; // dampen slightly but ensure downward
+          }
+        }
 
-        // check paddle collision
+        // check paddle collision (only when ball is moving downward)
         const paddleTop = G.height - 12 - 14;
         const paddleW = parseInt(getComputedStyle(paddle).width,10);
-        if(ballY + 18 >= paddleTop){
+        if(ballY + 18 >= paddleTop && ballSpeedY > 0){
           if(ballX + 9 >= paddleX && ballX <= paddleX + paddleW){
             // caught
             score += 1;
             scoreEl.textContent = score;
-            // bounce ball back up with increased speed
-            const upwardSpeed = 2.4 + Math.min(6, score * 0.18);
+            // bounce up with increased speed
+            const upwardSpeed = 2.8 + Math.min(8, score * 0.22);
             ballSpeedY = -upwardSpeed;
-            // small horizontal nudge based on where it hit the paddle
+            // horizontal nudge
             const hitPos = (ballX - paddleX) - (paddleW/2);
             ballSpeedX += hitPos * 0.03;
-            // limit horizontal speed to avoid runaway
-            const maxHX = 8;
+            // cap horizontal
+            const maxHX = 9;
             if(ballSpeedX > maxHX) ballSpeedX = maxHX;
             if(ballSpeedX < -maxHX) ballSpeedX = -maxHX;
           }
         }
 
-        // if ball falls below paddle (missed)
+        // missed
         if(ballY > G.height){
           lives -= 1;
           livesEl.textContent = lives;
@@ -150,7 +156,7 @@
         animId = requestAnimationFrame(update);
       }
 
-      // input handlers
+      // keyboard
       document.addEventListener('keydown', (e)=>{
         if(!running) return;
         if(e.key === 'ArrowLeft') paddleX = Math.max(4, paddleX - 18);
@@ -158,7 +164,7 @@
         render();
       });
 
-      // mouse/touch drag for paddle
+      // touch/mouse drag
       let dragging = false;
       paddle.addEventListener('pointerdown', (e)=>{ dragging=true; paddle.setPointerCapture(e.pointerId); });
       game.addEventListener('pointermove', (e)=>{
@@ -188,7 +194,7 @@
 
       console.log('Game script loaded.');
 
-      // initial render
+      // initial
       resetBall(); render();
 
     } catch(err){
